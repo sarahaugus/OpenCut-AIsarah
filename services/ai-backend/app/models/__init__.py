@@ -18,3 +18,5 @@ from app.models.engagement import (
 )
 from app.models.generation import EnhancePromptRequest, ImageGenParams, InfographicRequest
 from app.models.transcription import TranscriptionResult, TranscriptionSegment, TranscriptionWord
+
+from app.models.transcription import TranscriptionResult, TranscriptionSegment, TranscriptionWord
