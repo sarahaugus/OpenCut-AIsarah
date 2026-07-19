@@ -20,6 +20,7 @@ ENV/
 generated/
 uploads/
 models/
+!app/models/
 *.wav
 *.mp3
 *.mp4
