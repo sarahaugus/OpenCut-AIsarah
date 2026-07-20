@@ -487,7 +487,7 @@ class AssemblyService:
                 final_a = "final_amix"
 
                 # Extend video if audio overlay is longer than the composition
-                if total_audio_dur > total_dur:
+                if total_audio_dur > total_dur + 0.05:
                     extend = total_audio_dur - total_dur
                     filter_chains.append(
                         f"[{final_v}]tpad=stop_mode=clone:stop_duration={extend}[final_v_ext]"
