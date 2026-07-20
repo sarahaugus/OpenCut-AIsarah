@@ -248,6 +248,14 @@ class AssemblyService:
             if total_audio_dur > 0 and len(clips_config) > 0:
                 auto_clip_duration = total_audio_dur / len(clips_config)
 
+        # ── Calculate clip positions on the timeline ──────────────
+
+        clip_positions: list[float] = []
+        current_pos = 0.0
+        for c in clips_config:
+            clip_positions.append(current_pos)
+            current_pos += self._get_clip_duration(c)
+
         # ── Step 1: Process each clip ─────────────────────────────
 
         clip_inputs: list[str] = []      # ffmpeg -i arguments
@@ -415,8 +423,13 @@ class AssemblyService:
             dt_parts: list[str] = []
             for t in texts:
                 text = t.get("text", "")
-                start = t.get("start", 0)
-                duration = t.get("duration", 2)
+                clip_idx = t.get("clip_index")
+                if clip_idx is not None and clip_idx < len(clip_positions):
+                    start = clip_positions[clip_idx]
+                    duration = self._get_clip_duration(clips_config[clip_idx])
+                else:
+                    start = t.get("start", 0)
+                    duration = t.get("duration", 2)
                 position = t.get("position", "center")
                 font_size = t.get("fontSize", 36)
                 color = t.get("color", "white")
