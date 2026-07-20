@@ -385,7 +385,7 @@ class AssemblyService:
                 xdur = trans.get("duration", 0.5)
                 prev_dur = self._get_clip_duration(clips_config[i - 1])
                 prev_v = f"v_t{i-1}" if i > 1 else "v0"
-                prev_a = f"a_t{i-1}" if i > 1 else "a0"
+                prev_a = f"a_t{i-1}" if i > 1 else "a_t0"
 
                 if xtype in XFADE_MAP.values():
                     filter_chains.append(
