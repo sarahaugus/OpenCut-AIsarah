@@ -375,27 +375,30 @@ class AssemblyService:
             c.get("transition_from_previous") for c in clips_config[1:]
         )
 
-        if has_transitions and stream_idx > 1:
-            # Build transition overlay chain using v0 as starting point
-            filter_chains.append(f"[a0]adelay=50[a_t0]")
+            if has_transitions and stream_idx > 1:
+                # Build transition overlay chain using v0 as starting point
+                filter_chains.append(f"[a0]adelay=50[a_t0]")
 
-            for i in range(1, stream_idx):
-                trans = clips_config[i].get("transition_from_previous", {})
-                xtype = XFADE_MAP.get(trans.get("type", "cross-dissolve"), "fade")
-                xdur = trans.get("duration", 0.5)
-                prev_dur = self._get_clip_duration(clips_config[i - 1])
-                prev_v = f"v_t{i-1}" if i > 1 else "v0"
-                prev_a = f"a_t{i-1}" if i > 1 else "a_t0"
+                # Cumulative duration of the composite output (for correct xfade offset)
+                composite_dur = self._get_clip_duration(clips_config[0])
+                for i in range(1, stream_idx):
+                    trans = clips_config[i].get("transition_from_previous", {})
+                    xtype = XFADE_MAP.get(trans.get("type", "cross-dissolve"), "fade")
+                    xdur = trans.get("duration", 0.5)
+                    prev_v = f"v_t{i-1}" if i > 1 else "v0"
+                    prev_a = f"a_t{i-1}" if i > 1 else "a_t0"
 
-                if xtype in XFADE_MAP.values():
-                    filter_chains.append(
-                        f"[{prev_v}][v{i}]xfade=transition={xtype}:duration={xdur}:offset={prev_dur - xdur}[v_t{i}]"
-                    )
-                else:
-                    filter_chains.append(f"[{prev_v}][v{i}]concat=n=2:v=1:a=0[v_t{i}]")
+                    if xtype in XFADE_MAP.values():
+                        filter_chains.append(
+                            f"[{prev_v}][v{i}]xfade=transition={xtype}:duration={xdur}:offset={composite_dur - xdur}[v_t{i}]"
+                        )
+                    else:
+                        filter_chains.append(f"[{prev_v}][v{i}]concat=n=2:v=1:a=0[v_t{i}]")
 
-                # Concat audio
-                filter_chains.append(f"[{prev_a}][a{i}]concat=n=2:v=0:a=1[a_t{i}]")
+                    # Concat audio
+                    filter_chains.append(f"[{prev_a}][a{i}]concat=n=2:v=0:a=1[a_t{i}]")
+
+                    composite_dur = composite_dur + self._get_clip_duration(clips_config[i]) - xdur
 
             final_v = f"v_t{stream_idx - 1}"
             final_a = f"a_t{stream_idx - 1}"
