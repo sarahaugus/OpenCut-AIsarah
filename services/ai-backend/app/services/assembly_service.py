@@ -318,9 +318,9 @@ class AssemblyService:
                 # Instead of simple xfade, we overlay the new clip on the previous
                 if vf_parts:
                     vf_str = ",".join(vf_parts)
-                    clip_vstreams.append(f"[{input_idx}:v]{vf_str}[{vlabel}]")
+                    clip_vstreams.append(f"[{input_idx}:v]{vf_str},setpts=PTS[{vlabel}]")
                 else:
-                    clip_vstreams.append(f"[{input_idx}:v][{vlabel}]")
+                    clip_vstreams.append(f"[{input_idx}:v]setpts=PTS[{vlabel}]")
             else:
                 if vf_parts:
                     vf_str = ",".join(vf_parts)
@@ -374,8 +374,6 @@ class AssemblyService:
         filter_chains.extend(clip_astreams)
 
         # Process clips with transitions
-
-        # Process clips with transitions
         has_transitions = any(
             c.get("transition_from_previous") for c in clips_config[1:]
         )
@@ -384,7 +382,7 @@ class AssemblyService:
             # Build transition overlay chain
             # Start with first clip
             filter_chains.append(f"[v0]setpts=PTS[v_t0]")
-            filter_chains.append(f"[a0]adelay=1s[a_t0]")
+            filter_chains.append(f"[a0]adelay=50[a_t0]")
 
             for i in range(1, stream_idx):
                 trans = clips_config[i].get("transition_from_previous", {})
