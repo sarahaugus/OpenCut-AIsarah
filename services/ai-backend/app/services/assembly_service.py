@@ -342,9 +342,9 @@ class AssemblyService:
                 dur = self._get_clip_duration(clip_cfg)
                 if af_parts:
                     af_str = ",".join(af_parts)
-                    filter_chains.append(f"aevalsrc=0::d={dur}:s=44100,{af_str}[{alabel}]")
+                    filter_chains.append(f"aevalsrc=0:d={dur}:s=44100,{af_str}[{alabel}]")
                 else:
-                    filter_chains.append(f"aevalsrc=0::d={dur}:s=44100[{alabel}]")
+                    filter_chains.append(f"aevalsrc=0:d={dur}:s=44100[{alabel}]")
             elif af_parts:
                 af_str = ",".join(af_parts)
                 clip_astreams.append(f"[{input_idx}:a]{af_str}[{alabel}]")
