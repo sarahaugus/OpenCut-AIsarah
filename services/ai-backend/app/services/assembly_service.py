@@ -319,17 +319,11 @@ class AssemblyService:
 
                 # Use overlay with fade for transition
                 # Instead of simple xfade, we overlay the new clip on the previous
-                if vf_parts:
-                    vf_str = ",".join(vf_parts)
-                    clip_vstreams.append(f"[{input_idx}:v]{vf_str},setpts=PTS[{vlabel}]")
-                else:
-                    clip_vstreams.append(f"[{input_idx}:v]setpts=PTS[{vlabel}]")
+                vf_str = ",".join(vf_parts)
+                clip_vstreams.append(f"[{input_idx}:v]{vf_str}[{vlabel}]")
             else:
-                if vf_parts:
-                    vf_str = ",".join(vf_parts)
-                    clip_vstreams.append(f"[{input_idx}:v]{vf_str},setpts=PTS[{vlabel}]")
-                else:
-                    clip_vstreams.append(f"[{input_idx}:v]setpts=PTS[{vlabel}]")
+                vf_str = ",".join(vf_parts)
+                clip_vstreams.append(f"[{input_idx}:v]{vf_str}[{vlabel}]")
 
             # Audio stream — images generate silence, videos use input audio
             alabel = f"a{stream_idx}"
@@ -382,9 +376,7 @@ class AssemblyService:
         )
 
         if has_transitions and stream_idx > 1:
-            # Build transition overlay chain
-            # Start with first clip
-            filter_chains.append(f"[v0]setpts=PTS[v_t0]")
+            # Build transition overlay chain using v0 as starting point
             filter_chains.append(f"[a0]adelay=50[a_t0]")
 
             for i in range(1, stream_idx):
@@ -392,17 +384,18 @@ class AssemblyService:
                 xtype = XFADE_MAP.get(trans.get("type", "cross-dissolve"), "fade")
                 xdur = trans.get("duration", 0.5)
                 prev_dur = self._get_clip_duration(clips_config[i - 1])
+                prev_v = f"v_t{i-1}" if i > 1 else "v0"
+                prev_a = f"a_t{i-1}" if i > 1 else "a0"
 
                 if xtype in XFADE_MAP.values():
-                    # Use xfade between previous composite and current clip
                     filter_chains.append(
-                        f"[v_t{i-1}][v{i}]xfade=transition={xtype}:duration={xdur}:offset={prev_dur - xdur}[v_t{i}]"
+                        f"[{prev_v}][v{i}]xfade=transition={xtype}:duration={xdur}:offset={prev_dur - xdur}[v_t{i}]"
                     )
                 else:
-                    filter_chains.append(f"[v_t{i-1}][v{i}]concat=n=2:v=1:a=0[v_t{i}]")
+                    filter_chains.append(f"[{prev_v}][v{i}]concat=n=2:v=1:a=0[v_t{i}]")
 
                 # Concat audio
-                filter_chains.append(f"[a_t{i-1}][a{i}]concat=n=2:v=0:a=1[a_t{i}]")
+                filter_chains.append(f"[{prev_a}][a{i}]concat=n=2:v=0:a=1[a_t{i}]")
 
             final_v = f"v_t{stream_idx - 1}"
             final_a = f"a_t{stream_idx - 1}"
