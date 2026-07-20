@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routes import analyze, audio, command, engagement, export, factcheck, generate, llm, podcast, sarvam, search, setup, smallest, template, transcribe, transcribe_ws, tts, turboquant, video, youtube
+from app.routes import analyze, assembly, audio, command, engagement, export, factcheck, generate, llm, podcast, sarvam, search, setup, smallest, template, transcribe, transcribe_ws, tts, turboquant, video, youtube
+from app.services.assembly_service import assembly_service
 
 # Configure logging
 logging.basicConfig(
@@ -52,7 +54,14 @@ async def lifespan(app: FastAPI):
         settings.SEEDANCE_API_BASE_URL,
         "configured" if settings.SEEDANCE_API_KEY else "NOT configured",
     )
+    # Periodically clean old assembly temp files
+    async def _cleanup_loop():
+        while True:
+            await asyncio.sleep(1800)  # every 30 min
+            assembly_service.cleanup_old_files()
+    cleanup_task = asyncio.create_task(_cleanup_loop())
     yield
+    cleanup_task.cancel()
     logger.info("Shutdown complete.")
 
 
@@ -76,6 +85,7 @@ app.add_middleware(
 app.mount("/generated", StaticFiles(directory=settings.GENERATED_DIR), name="generated")
 
 # Register routers
+app.include_router(assembly.router)
 app.include_router(transcribe.router)
 app.include_router(transcribe_ws.router)
 app.include_router(llm.router)

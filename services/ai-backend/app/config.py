@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     ENGAGEMENT_AUDIO_SYNC_WEIGHT: float = 0.10
     ENGAGEMENT_FACE_WEIGHT: float = 0.05
 
+    # Assembly / download
+    ASSEMBLY_DOWNLOAD_BASE_URL: str = "http://144.91.91.227:8420/api/assembly/download"
+
     # Limits
     MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500 MB
 
