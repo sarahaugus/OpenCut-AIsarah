@@ -215,8 +215,8 @@ class AssemblyService:
     ) -> str:
         """Run the full assembly pipeline. Returns path to output video."""
         os.makedirs(TEMP_DIR, exist_ok=True)
-        output_id = uuid.uuid4().hex[:12]
-        output_path = os.path.join(TEMP_DIR, f"assembly_{output_id}.mp4")
+        output_name = config.get("output_name") or uuid.uuid4().hex[:12]
+        output_path = os.path.join(TEMP_DIR, f"{output_name}.mp4")
 
         timeline = config.get("timeline", config)
         clips_config = timeline.get("clips", [])
