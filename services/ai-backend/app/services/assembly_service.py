@@ -275,7 +275,7 @@ class AssemblyService:
 
             # Input — images use loop, video uses -ss
             if is_image:
-                clip_inputs.extend(["-loop", "1", "-r", str(fps)])
+                clip_inputs.extend(["-loop", "1", "-framerate", str(fps)])
                 dur = trim_end - trim_start if trim_end is not None else auto_clip_duration
                 if dur is not None and dur > 0:
                     clip_inputs.extend(["-t", str(dur)])
@@ -302,6 +302,9 @@ class AssemblyService:
             # Speed
             if speed != 1.0:
                 vf_parts.append(f"setpts={1/speed}*PTS")
+
+            # Ensure constant frame rate (required by xfade transition)
+            vf_parts.append(f"fps={fps}")
 
             vlabel = f"v{stream_idx}"
 
