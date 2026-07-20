@@ -410,7 +410,7 @@ class AssemblyService:
             if audio_path and os.path.exists(audio_path):
                 clip_inputs.extend(["-i", audio_path])
                 aov_idx = input_idx
-                aov_volume = audio_overlay.get("volume", 0.3)
+                aov_volume = audio_overlay.get("volume", 1.0)
                 aov_fade_in = audio_overlay.get("fade_in", 0)
                 aov_fade_out = audio_overlay.get("fade_out", 0)
 
@@ -433,10 +433,19 @@ class AssemblyService:
                 # Apply effects to overlay track, then mix with original audio
                 filter_chains.append(f"[{aov_idx}:a]{aov_filter_str}[bgm]")
                 filter_chains.append(
-                    f"[{final_a}][bgm]amix=inputs=2:duration=first:dropout_transition=2[final_amix]"
+                    f"[{final_a}][bgm]amix=inputs=2:duration=longest:dropout_transition=2[final_amix]"
                 )
                 final_a = "final_amix"
                 input_idx += 1
+
+                # Extend video if audio overlay is longer than the composition
+                audio_dur = self._get_media_duration(audio_path)
+                if audio_dur > total_dur:
+                    extend = audio_dur - total_dur
+                    filter_chains.append(
+                        f"[{final_v}]tpad=stop_mode=clone:stop_duration={extend}[final_v_ext]"
+                    )
+                    final_v = "final_v_ext"
 
         # ── Step 5: Scale to output resolution ─────────────────────
 
@@ -485,6 +494,22 @@ class AssemblyService:
 
         logger.info("Assembly complete: %s", output_path)
         return output_path
+
+    @staticmethod
+    def _get_media_duration(filepath: str) -> float:
+        """Get duration of a media file in seconds via ffprobe."""
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-show_entries",
+                    "format=duration", "-of", "default=noprint_wrappers=1:nokey=1",
+                    filepath,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            return float(result.stdout.strip())
+        except Exception:
+            return 0.0
 
     def _get_clip_duration(self, clip_cfg: dict) -> float:
         """Get the duration of a clip after trim and speed adjustments."""
