@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 TEMP_DIR = "/tmp/opencut_assembly"
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".tif"}
+
 # ── xfade transition name mapping ──────────────────────────────────────
 # Maps OpenCut frontend transition types to FFmpeg xfade transition names.
 XFADE_MAP: dict[str, str] = {
@@ -229,6 +231,20 @@ class AssemblyService:
         height = output_cfg.get("resolution", "1920x1080").split("x")[1]
         fps = output_cfg.get("fps", 30)
 
+        # ── Step 0: Calculate auto clip duration from audio_overlay ─
+
+        auto_clip_duration: float | None = None
+        if audio_overlay:
+            ao_list = audio_overlay if isinstance(audio_overlay, list) else [audio_overlay]
+            total_audio_dur = 0.0
+            for ao in ao_list:
+                if ao.get("file_index") is not None:
+                    ap = file_map.get(ao["file_index"])
+                    if ap and os.path.exists(ap):
+                        total_audio_dur += self._get_media_duration(ap)
+            if total_audio_dur > 0 and len(clips_config) > 0:
+                auto_clip_duration = total_audio_dur / len(clips_config)
+
         # ── Step 1: Process each clip ─────────────────────────────
 
         clip_inputs: list[str] = []      # ffmpeg -i arguments
@@ -251,12 +267,23 @@ class AssemblyService:
             effects = clip_cfg.get("effects", [])
             filter_preset = clip_cfg.get("filter_preset")
             transition = clip_cfg.get("transition_from_previous")
+            is_image = self._is_image(path)
 
-            # Input
-            clip_inputs.extend(["-ss", str(trim_start)])
-            if trim_end is not None:
-                clip_inputs.extend(["-t", str(trim_end - trim_start)])
-            clip_inputs.extend(["-i", path])
+            # Input — images use loop, video uses -ss
+            if is_image:
+                clip_inputs.extend(["-loop", "1", "-r", str(fps)])
+                dur = trim_end - trim_start if trim_end is not None else auto_clip_duration
+                if dur is not None and dur > 0:
+                    clip_inputs.extend(["-t", str(dur)])
+                clip_inputs.extend(["-i", path])
+                # Set trim.end so _get_clip_duration returns correct value
+                if dur is not None and trim_end is None:
+                    clip_cfg.setdefault("trim", {})["end"] = dur
+            else:
+                clip_inputs.extend(["-ss", str(trim_start)])
+                if trim_end is not None:
+                    clip_inputs.extend(["-t", str(trim_end - trim_start)])
+                clip_inputs.extend(["-i", path])
 
             # Video filter chain
             vf_parts: list[str] = []
@@ -404,20 +431,26 @@ class AssemblyService:
 
         # ── Step 4: Audio overlay (background music) ───────────────
 
-        if audio_overlay and audio_overlay.get("file_index") is not None:
-            audio_fi = audio_overlay["file_index"]
-            audio_path = file_map.get(audio_fi)
-            if audio_path and os.path.exists(audio_path):
-                clip_inputs.extend(["-i", audio_path])
-                aov_idx = input_idx
-                aov_volume = audio_overlay.get("volume", 1.0)
-                aov_fade_in = audio_overlay.get("fade_in", 0)
-                aov_fade_out = audio_overlay.get("fade_out", 0)
+        total_dur = sum(
+            self._get_clip_duration(c) for c in clips_config
+        )
 
-                # Get total duration from the video composition
-                total_dur = sum(
-                    self._get_clip_duration(c) for c in clips_config
-                )
+        if audio_overlay:
+            ao_list = audio_overlay if isinstance(audio_overlay, list) else [audio_overlay]
+            bgm_indices: list[int] = []
+            total_audio_dur = 0.0
+
+            for ao_idx, ao in enumerate(ao_list):
+                if ao.get("file_index") is None:
+                    continue
+                audio_path = file_map.get(ao["file_index"])
+                if not audio_path or not os.path.exists(audio_path):
+                    continue
+
+                clip_inputs.extend(["-i", audio_path])
+                aov_volume = ao.get("volume", 1.0)
+                aov_fade_in = ao.get("fade_in", 0)
+                aov_fade_out = ao.get("fade_out", 0)
 
                 aov_filters: list[str] = [f"volume={aov_volume}"]
                 if aov_fade_in > 0:
@@ -425,23 +458,34 @@ class AssemblyService:
                 if aov_fade_out > 0:
                     aov_filters.append(f"afade=t=out:st={total_dur - aov_fade_out}:d={aov_fade_out}")
 
-                ov_effects = audio_overlay.get("effects", [])
+                ov_effects = ao.get("effects", [])
                 aov_filters.extend(_build_audio_effect_filters(ov_effects))
 
                 aov_filter_str = ",".join(aov_filters)
-
-                # Apply effects to overlay track, then mix with original audio
-                filter_chains.append(f"[{aov_idx}:a]{aov_filter_str}[bgm]")
-                filter_chains.append(
-                    f"[{final_a}][bgm]amix=inputs=2:duration=longest:dropout_transition=2[final_amix]"
-                )
-                final_a = "final_amix"
+                bgm_label = f"bgm{ao_idx}"
+                filter_chains.append(f"[{input_idx}:a]{aov_filter_str}[{bgm_label}]")
+                bgm_indices.append(ao_idx)
+                total_audio_dur += self._get_media_duration(audio_path)
                 input_idx += 1
 
+            if bgm_indices:
+                if len(bgm_indices) == 1:
+                    filter_chains.append(
+                        f"[{final_a}][bgm0]amix=inputs=2:duration=longest:dropout_transition=2[final_amix]"
+                    )
+                else:
+                    bgm_labels = "".join(f"[bgm{i}]" for i in bgm_indices)
+                    filter_chains.append(
+                        f"{bgm_labels}concat=n={len(bgm_indices)}:v=0:a=1[bgm_concat]"
+                    )
+                    filter_chains.append(
+                        f"[{final_a}][bgm_concat]amix=inputs=2:duration=longest:dropout_transition=2[final_amix]"
+                    )
+                final_a = "final_amix"
+
                 # Extend video if audio overlay is longer than the composition
-                audio_dur = self._get_media_duration(audio_path)
-                if audio_dur > total_dur:
-                    extend = audio_dur - total_dur
+                if total_audio_dur > total_dur:
+                    extend = total_audio_dur - total_dur
                     filter_chains.append(
                         f"[{final_v}]tpad=stop_mode=clone:stop_duration={extend}[final_v_ext]"
                     )
@@ -510,6 +554,11 @@ class AssemblyService:
             return float(result.stdout.strip())
         except Exception:
             return 0.0
+
+    @staticmethod
+    def _is_image(filepath: str) -> bool:
+        """Check if a file is an image by extension."""
+        return Path(filepath).suffix.lower() in IMAGE_EXTENSIONS
 
     def _get_clip_duration(self, clip_cfg: dict) -> float:
         """Get the duration of a clip after trim and speed adjustments."""

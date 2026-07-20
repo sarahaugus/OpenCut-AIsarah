@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/assembly", tags=["assembly"])
 TEMP_UPLOAD_DIR = "/tmp/opencut_uploads"
 MAX_FILES = 20
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
-ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".wma"}
+ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".wma", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".tif"}
 URL_TIMEOUT = 120
 
 
@@ -107,11 +107,14 @@ async def assemble(
                 clip["file_index"] = next_idx
                 next_idx += 1
 
-        ao = timeline_config.get("timeline", timeline_config).get("audio_overlay", {})
-        if ao and "url" in ao:
-            url_entries.append((next_idx, ao["url"]))
-            ao["file_index"] = next_idx
-            next_idx += 1
+        ao = timeline_config.get("timeline", timeline_config).get("audio_overlay")
+        if ao:
+            ao_items = ao if isinstance(ao, list) else [ao]
+            for item in ao_items:
+                if "url" in item:
+                    url_entries.append((next_idx, item["url"]))
+                    item["file_index"] = next_idx
+                    next_idx += 1
 
         for idx, url in url_entries:
             fid = uuid.uuid4().hex[:12]
