@@ -231,10 +231,13 @@ class AssemblyService:
         height = output_cfg.get("resolution", "1920x1080").split("x")[1]
         fps = output_cfg.get("fps", 30)
 
-        # ── Step 0: Calculate auto clip duration from audio_overlay ─
+        # ── Step 0: Calculate auto clip duration ──────────────────
 
         auto_clip_duration: float | None = None
-        if audio_overlay:
+        output_duration = output_cfg.get("duration")
+        if output_duration and len(clips_config) > 0:
+            auto_clip_duration = output_duration / len(clips_config)
+        elif audio_overlay:
             ao_list = audio_overlay if isinstance(audio_overlay, list) else [audio_overlay]
             total_audio_dur = 0.0
             for ao in ao_list:
