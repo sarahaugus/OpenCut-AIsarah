@@ -26,8 +26,6 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/env/package.json packages/env/package.json
 COPY packages/ui/package.json packages/ui/package.json
 
-RUN sed -i '/onnxruntime-node/d' bun.lock
-
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --ignore-scripts --no-optional && \
     cd /app && \
