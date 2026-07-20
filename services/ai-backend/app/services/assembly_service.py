@@ -311,7 +311,7 @@ class AssemblyService:
                 af_str = ",".join(af_parts)
                 clip_astreams.append(f"[{input_idx}:a]{af_str}[{alabel}]")
             else:
-                clip_astreams.append(f"[{input_idx}:a]adelay=1s|1s[{alabel}]")
+                clip_astreams.append(f"[{input_idx}:a]anull[{alabel}]")
 
             stream_idx += 1
             input_idx += 1
@@ -430,9 +430,9 @@ class AssemblyService:
 
                 aov_filter_str = ",".join(aov_filters)
 
-                # Mix audio tracks: original + music overlay
+                # Apply effects to overlay track, then mix with original audio
+                filter_chains.append(f"[{aov_idx}:a]{aov_filter_str}[bgm]")
                 filter_chains.append(
-                    f"[{final_a}][{aov_idx}:a]{aov_filter_str}[bgm];"
                     f"[{final_a}][bgm]amix=inputs=2:duration=first:dropout_transition=2[final_amix]"
                 )
                 final_a = "final_amix"
