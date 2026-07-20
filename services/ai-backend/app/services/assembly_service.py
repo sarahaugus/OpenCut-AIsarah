@@ -253,6 +253,7 @@ class AssemblyService:
         clip_inputs: list[str] = []      # ffmpeg -i arguments
         clip_vstreams: list[str] = []    # labeled video streams
         clip_astreams: list[str] = []    # labeled audio streams
+        filter_chains: list[str] = []    # full filtergraph
         input_idx = 0
         stream_idx = 0
 
@@ -327,7 +328,7 @@ class AssemblyService:
                 else:
                     clip_vstreams.append(f"[{input_idx}:v]setpts=PTS[{vlabel}]")
 
-            # Audio stream
+            # Audio stream — images generate silence, videos use input audio
             alabel = f"a{stream_idx}"
             af_parts: list[str] = []
             audio_effects = clip_cfg.get("audio_effects", [])
@@ -337,7 +338,14 @@ class AssemblyService:
             if speed != 1.0:
                 af_parts.append(f"atempo={max(0.5, min(2.0, speed))}")
 
-            if af_parts:
+            if is_image:
+                dur = self._get_clip_duration(clip_cfg)
+                if af_parts:
+                    af_str = ",".join(af_parts)
+                    filter_chains.append(f"aevalsrc=0::d={dur}:s=44100,{af_str}[{alabel}]")
+                else:
+                    filter_chains.append(f"aevalsrc=0::d={dur}:s=44100[{alabel}]")
+            elif af_parts:
                 af_str = ",".join(af_parts)
                 clip_astreams.append(f"[{input_idx}:a]{af_str}[{alabel}]")
             else:
@@ -361,11 +369,11 @@ class AssemblyService:
         video_concat_inputs = "".join(f"[v{i}]" for i in range(stream_idx))
         audio_concat_inputs = "".join(f"[a{i}]" for i in range(stream_idx))
 
-        # Build the filter graph
-        # Split into groups of clips with transitions
-        # For simplicity: use concat for all clips, apply transitions as overlays
+        # Build the filter graph — add per-clip defs then build concat/transition
+        filter_chains.extend(clip_vstreams)
+        filter_chains.extend(clip_astreams)
 
-        filter_chains: list[str] = []
+        # Process clips with transitions
 
         # Process clips with transitions
         has_transitions = any(
@@ -376,7 +384,7 @@ class AssemblyService:
             # Build transition overlay chain
             # Start with first clip
             filter_chains.append(f"[v0]setpts=PTS[v_t0]")
-            filter_chains.append(f"[a0]adelay=1s|1s[a_t0]")
+            filter_chains.append(f"[a0]adelay=1s[a_t0]")
 
             for i in range(1, stream_idx):
                 trans = clips_config[i].get("transition_from_previous", {})
