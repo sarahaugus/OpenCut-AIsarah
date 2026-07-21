@@ -487,12 +487,7 @@ class AssemblyService:
                 filter_chains.append(f"[{final_v}]{dt_str}[final_wtext]")
                 final_v = "final_wtext"
 
-            # Clean up text files after building filter graph (FFmpeg reads at init)
-            for tf in text_files:
-                try:
-                    os.remove(tf)
-                except OSError:
-                    pass
+
 
         # ── Step 4: Audio overlay (background music) ───────────────
 
@@ -592,6 +587,13 @@ class AssemblyService:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
+
+        # Clean up text temp files (FFmpeg has read them by now)
+        for tf in text_files:
+            try:
+                os.remove(tf)
+            except OSError:
+                pass
 
         if proc.returncode != 0:
             error = stderr.decode("utf-8", errors="replace")[-2000:]
