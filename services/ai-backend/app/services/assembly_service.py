@@ -18,6 +18,24 @@ logger = logging.getLogger(__name__)
 
 TEMP_DIR = "/tmp/opencut_assembly"
 
+
+def _wrap_text(text: str, max_chars: int = 22) -> list[str]:
+    """Word-wrap text for video overlay."""
+    words = text.split()
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        if not cur:
+            cur = w
+        elif len(cur) + len(w) + 1 <= max_chars:
+            cur += " " + w
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [text]
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".tif"}
 
 # ── xfade transition name mapping ──────────────────────────────────────
@@ -419,10 +437,9 @@ class AssemblyService:
         # ── Step 3: Text overlays ──────────────────────────────────
 
         if texts:
-            # Build drawtext filters
             dt_parts: list[str] = []
             for t in texts:
-                text = t.get("text", "")
+                raw_text = t.get("text", "")
                 clip_idx = t.get("clip_index")
                 if clip_idx is not None and clip_idx < len(clip_positions):
                     start = clip_positions[clip_idx]
@@ -434,16 +451,28 @@ class AssemblyService:
                 font_size = t.get("fontSize", 36)
                 color = t.get("color", "white")
 
-                escaped = text.replace("'", "'\\''").replace(":", "\\:").replace(",", "\\,")
-                x_map = {"center": "(w-text_w)/2", "left": "20", "right": "w-text_w-20"}
-                y_map = {"center": "(h-text_h)/2", "top": "40", "bottom": "h-text_h-40"}
-                x = x_map.get(position, "(w-text_w)/2")
-                y = y_map.get(position, "(h-text_h)/2")
+                lines = _wrap_text(raw_text)
+                line_count = len(lines)
+                line_h = font_size * 1.3
+                block_h = line_count * line_h
 
-                dt_parts.append(
-                    f"drawtext=text='{escaped}':fontsize={font_size}:fontcolor={color}:"
-                    f"x={x}:y={y}:enable='between(t,{start},{start + duration})'"
-                )
+                x_map = {"center": "(w-text_w)/2", "left": "20", "right": "w-text_w-20"}
+                x = x_map.get(position, "(w-text_w)/2")
+
+                for li, line in enumerate(lines):
+                    escaped = line.replace("'", "'\\''").replace(":", "\\:").replace(",", "\\,")
+                    y_expr = {
+                        "center": f"(h-{block_h})/2 + {li}*{line_h}",
+                        "top": f"40 + {li}*{line_h}",
+                        "bottom": f"h-40-{block_h} + {li}*{line_h}",
+                    }.get(position, f"(h-{block_h})/2 + {li}*{line_h}")
+
+                    dt_parts.append(
+                        f"drawtext=text='{escaped}':fontsize={font_size}:fontcolor={color}:"
+                        f"x={x}:y={y_expr}:"
+                        f"fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:"
+                        f"enable='between(t,{start},{start + duration})'"
+                    )
 
             if dt_parts:
                 dt_str = ",".join(dt_parts)
