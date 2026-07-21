@@ -476,7 +476,7 @@ class AssemblyService:
 
                     dt_parts.append(
                         f"drawtext=textfile={tf}:fontsize={font_size}:fontcolor={color}:"
-                        f"text_encoding=UTF-8:x={x}:y={y_expr}:"
+                        f"x={x}:y={y_expr}:"
                         f"fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:"
                         f"enable='between(t,{start},{start + duration})'"
                     )
@@ -561,15 +561,10 @@ class AssemblyService:
 
         filter_complex = ";".join(filter_chains)
 
-        # Write filter_complex to a file to avoid CLI argument length limits
-        script_path = os.path.join(TEMP_DIR, f"filter_{uuid.uuid4().hex[:8]}.txt")
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(filter_complex)
-
         cmd = [
             "ffmpeg", "-y",
             *clip_inputs,
-            "-filter_complex_script", script_path,
+            "-filter_complex", filter_complex,
             "-map", "[outv]",
             "-map", f"[{final_a}]",
             "-c:v", "libx264",
@@ -591,12 +586,6 @@ class AssemblyService:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
-
-        # Clean up filter script
-        try:
-            os.remove(script_path)
-        except OSError:
-            pass
 
         if proc.returncode != 0:
             error = stderr.decode("utf-8", errors="replace")[-20000:]
@@ -648,7 +637,7 @@ class AssemblyService:
             return
         for fname in os.listdir(TEMP_DIR):
             fpath = os.path.join(TEMP_DIR, fname)
-            if (fname.startswith("assembly_") and fname.endswith(".mp4")) or (fname.endswith(".txt") and fname.startswith(("txt_", "filter_"))):
+            if (fname.startswith("assembly_") and fname.endswith(".mp4")) or (fname.startswith("txt_") and fname.endswith(".txt")):
                 age = now - os.path.getmtime(fpath)
                 if age > max_age_seconds:
                     try:
