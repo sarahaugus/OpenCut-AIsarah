@@ -439,7 +439,6 @@ class AssemblyService:
         text_files: list[str] = []
         if texts:
             # Write text lines to temp files for reliable UTF-8 handling
-            import uuid as _uuid
             dt_parts: list[str] = []
             for t in texts:
                 raw_text = t.get("text", "")
@@ -470,7 +469,7 @@ class AssemblyService:
                     }.get(position, f"(h-{block_h})/2 + {li}*{line_h}")
 
                     # Write text to file for reliable UTF-8
-                    tf = os.path.join(TEMP_DIR, f"txt_{_uuid.uuid4().hex[:8]}.txt")
+                    tf = os.path.join(TEMP_DIR, f"txt_{uuid.uuid4().hex[:8]}.txt")
                     with open(tf, "w", encoding="utf-8") as f:
                         f.write(line)
                     text_files.append(tf)
@@ -562,10 +561,15 @@ class AssemblyService:
 
         filter_complex = ";".join(filter_chains)
 
+        # Write filter_complex to a file to avoid CLI argument length limits
+        script_path = os.path.join(TEMP_DIR, f"filter_{uuid.uuid4().hex[:8]}.txt")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(filter_complex)
+
         cmd = [
             "ffmpeg", "-y",
             *clip_inputs,
-            "-filter_complex", filter_complex,
+            "-filter_complex_script", script_path,
             "-map", "[outv]",
             "-map", f"[{final_a}]",
             "-c:v", "libx264",
@@ -588,8 +592,14 @@ class AssemblyService:
         )
         stdout, stderr = await proc.communicate()
 
+        # Clean up filter script
+        try:
+            os.remove(script_path)
+        except OSError:
+            pass
+
         if proc.returncode != 0:
-            error = stderr.decode("utf-8", errors="replace")[-2000:]
+            error = stderr.decode("utf-8", errors="replace")[-20000:]
             logger.error("Assembly FFmpeg failed: %s", error)
             raise RuntimeError(f"FFmpeg assembly failed: {error}")
 
@@ -638,7 +648,7 @@ class AssemblyService:
             return
         for fname in os.listdir(TEMP_DIR):
             fpath = os.path.join(TEMP_DIR, fname)
-            if (fname.startswith("assembly_") and fname.endswith(".mp4")) or (fname.startswith("txt_") and fname.endswith(".txt")):
+            if (fname.startswith("assembly_") and fname.endswith(".mp4")) or (fname.endswith(".txt") and fname.startswith(("txt_", "filter_"))):
                 age = now - os.path.getmtime(fpath)
                 if age > max_age_seconds:
                     try:
