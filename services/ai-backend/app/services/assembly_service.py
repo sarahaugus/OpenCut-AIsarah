@@ -478,7 +478,7 @@ class AssemblyService:
                     dt_parts.append(
                         f"drawtext=textfile={tf}:fontsize={font_size}:fontcolor={color}:"
                         f"x={x}:y={y_expr}:"
-                        f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf:"
+                        f"fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:"
                         f"enable='between(t,{start},{start + duration})'"
                     )
 
