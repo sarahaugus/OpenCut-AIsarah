@@ -437,7 +437,10 @@ class AssemblyService:
         # ── Step 3: Text overlays ──────────────────────────────────
 
         if texts:
+            # Write text lines to temp files for reliable UTF-8 handling
+            import uuid as _uuid
             dt_parts: list[str] = []
+            text_files: list[str] = []
             for t in texts:
                 raw_text = t.get("text", "")
                 clip_idx = t.get("clip_index")
@@ -460,15 +463,20 @@ class AssemblyService:
                 x = x_map.get(position, "(w-text_w)/2")
 
                 for li, line in enumerate(lines):
-                    escaped = line.replace("'", "'\\''").replace(":", "\\:").replace(",", "\\,")
                     y_expr = {
                         "center": f"(h-{block_h})/2 + {li}*{line_h}",
                         "top": f"40 + {li}*{line_h}",
                         "bottom": f"h-40-{block_h} + {li}*{line_h}",
                     }.get(position, f"(h-{block_h})/2 + {li}*{line_h}")
 
+                    # Write text to file for reliable UTF-8
+                    tf = os.path.join(TEMP_DIR, f"txt_{_uuid.uuid4().hex[:8]}.txt")
+                    with open(tf, "w", encoding="utf-8") as f:
+                        f.write(line)
+                    text_files.append(tf)
+
                     dt_parts.append(
-                        f"drawtext=text='{escaped}':fontsize={font_size}:fontcolor={color}:"
+                        f"drawtext=textfile={tf}:fontsize={font_size}:fontcolor={color}:"
                         f"x={x}:y={y_expr}:"
                         f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf:"
                         f"enable='between(t,{start},{start + duration})'"
@@ -478,6 +486,13 @@ class AssemblyService:
                 dt_str = ",".join(dt_parts)
                 filter_chains.append(f"[{final_v}]{dt_str}[final_wtext]")
                 final_v = "final_wtext"
+
+            # Clean up text files after building filter graph (FFmpeg reads at init)
+            for tf in text_files:
+                try:
+                    os.remove(tf)
+                except OSError:
+                    pass
 
         # ── Step 4: Audio overlay (background music) ───────────────
 
