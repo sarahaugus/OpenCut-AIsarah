@@ -436,11 +436,11 @@ class AssemblyService:
 
         # ── Step 3: Text overlays ──────────────────────────────────
 
+        text_files: list[str] = []
         if texts:
             # Write text lines to temp files for reliable UTF-8 handling
             import uuid as _uuid
             dt_parts: list[str] = []
-            text_files: list[str] = []
             for t in texts:
                 raw_text = t.get("text", "")
                 clip_idx = t.get("clip_index")
@@ -477,7 +477,7 @@ class AssemblyService:
 
                     dt_parts.append(
                         f"drawtext=textfile={tf}:fontsize={font_size}:fontcolor={color}:"
-                        f"x={x}:y={y_expr}:"
+                        f"text_encoding=UTF-8:x={x}:y={y_expr}:"
                         f"fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:"
                         f"enable='between(t,{start},{start + duration})'"
                     )
@@ -588,13 +588,6 @@ class AssemblyService:
         )
         stdout, stderr = await proc.communicate()
 
-        # Clean up text temp files (FFmpeg has read them by now)
-        for tf in text_files:
-            try:
-                os.remove(tf)
-            except OSError:
-                pass
-
         if proc.returncode != 0:
             error = stderr.decode("utf-8", errors="replace")[-2000:]
             logger.error("Assembly FFmpeg failed: %s", error)
@@ -645,7 +638,7 @@ class AssemblyService:
             return
         for fname in os.listdir(TEMP_DIR):
             fpath = os.path.join(TEMP_DIR, fname)
-            if fname.startswith("assembly_") and fname.endswith(".mp4"):
+            if (fname.startswith("assembly_") and fname.endswith(".mp4")) or (fname.startswith("txt_") and fname.endswith(".txt")):
                 age = now - os.path.getmtime(fpath)
                 if age > max_age_seconds:
                     try:
